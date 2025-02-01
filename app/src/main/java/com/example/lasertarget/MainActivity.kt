@@ -15,6 +15,9 @@ import android.widget.CheckBox
 import android.widget.ImageView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import android.graphics.Bitmap
+import org.opencv.android.Utils
+import org.opencv.imgproc.Imgproc
 
 
 class MainActivity : AppCompatActivity(),CameraBridgeViewBase.CvCameraViewListener2 {
@@ -28,6 +31,8 @@ class MainActivity : AppCompatActivity(),CameraBridgeViewBase.CvCameraViewListen
     private lateinit var textViewStatus: TextView
     private var isOpenCvInit = false
     private val cameraPermissionRqCode = 100
+    private lateinit var inputMat: Mat
+    private lateinit var processedMat: Mat
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,16 +73,39 @@ class MainActivity : AppCompatActivity(),CameraBridgeViewBase.CvCameraViewListen
 
     override fun onCameraViewStarted(width: Int, height: Int) {
         isPreviewActive = true
+        inputMat = Mat(height , width, CvType.CV_8UC4)
+        processedMat = Mat(height, width, CvType.CV_8UC1)
         updateControls()
     }
 
     override fun onCameraViewStopped() {
         isPreviewActive = false
+        inputMat.release()
+        processedMat.release()
         updateControls()
     }
 
     override fun onCameraFrame(inputFrame: CameraBridgeViewBase.CvCameraViewFrame?): Mat {
-        return inputFrame!!.rgba()
+        inputFrame!!.rgba().copyTo(inputMat)
+        var matToDisplay = inputMat
+        if (checkBoxProcessing.isChecked){
+            Imgproc.cvtColor(inputMat, processedMat, Imgproc.COLOR_RGBA2GRAY)
+            Imgproc.adaptiveThreshold(
+                processedMat, processedMat, 255.0,
+                Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                Imgproc.THRESH_BINARY, 21, 0.0
+            )
+            matToDisplay = processedMat
+        }
+        val bitmapToDisplay = Bitmap.createBitmap(matToDisplay.cols(), matToDisplay.rows(), Bitmap.Config.ARGB_8888)
+        Utils.matToBitmap(matToDisplay, bitmapToDisplay)
+
+        // Display it on UI Thread
+        runOnUiThread {
+            imageView.setImageBitmap(bitmapToDisplay)
+        }
+
+        return inputMat
     }
     private fun updateControls() {
         if(isOpenCvInit){
